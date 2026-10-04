@@ -1,0 +1,488 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ACM_CORE
+  ACM_EXEC
+  CLUB_REP
+  VIEWER
+}
+
+enum EventType {
+  WORKSHOP
+  HACKATHON
+  SEMINAR
+  GUEST_LECTURE
+  COMPETITION
+  CULTURAL
+  SPORTS
+  NETWORKING
+  ORIENTATION
+  OTHER
+}
+
+enum EventStatus {
+  DRAFT
+  SUBMITTED
+  VERIFIED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum ReviewDecision {
+  VERIFIED
+  REJECTED
+}
+
+enum ConflictType {
+  VENUE
+  ORGANIZER
+  AUDIENCE
+  TIGHT_TURNAROUND
+}
+
+enum ConflictSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ConflictStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  OVERRIDDEN
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REIMBURSED
+}
+
+enum NotificationType {
+  EVENT_SUBMITTED
+  EVENT_VERIFIED
+  EVENT_REJECTED
+  EVENT_CANCELLED
+  CONFLICT_FLAGGED
+  CONFLICT_RESOLVED
+  EXPENSE_SUBMITTED
+  EXPENSE_APPROVED
+  EXPENSE_REJECTED
+  BUDGET_ALERT
+  SEMESTER_LOCKED
+  GENERAL
+}
+
+enum AuditAction {
+  EVENT_CREATE
+  EVENT_UPDATE
+  EVENT_SUBMIT
+  EVENT_VERIFY
+  EVENT_REJECT
+  EVENT_CANCEL
+  EVENT_COMPLETE
+  CONFLICT_ACKNOWLEDGE
+  CONFLICT_RESOLVE
+  CONFLICT_OVERRIDE
+  EXPENSE_CREATE
+  EXPENSE_UPDATE
+  EXPENSE_APPROVE
+  EXPENSE_REJECT
+  BUDGET_ALLOCATE
+  BUDGET_REVISE
+  SEMESTER_LOCK
+  USER_CREATE
+  USER_UPDATE
+}
+
+// ============================================================
+// MODELS
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  role          UserRole  @default(VIEWER)
+  clubId        String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  club                    Club?               @relation("UserClub", fields: [clubId], references: [id], onDelete: SetNull)
+  submittedEvents         Event[]             @relation("EventSubmitter")
+  reviewedEvents          EventReview[]
+  lockedSemesters         Semester[]          @relation("SemesterLocker")
+  conflictsResolved       ConflictRecord[]    @relation("ConflictResolver")
+  createdExpenses         Expense[]           @relation("ExpenseCreator")
+  reviewedExpenses        Expense[]           @relation("ExpenseReviewer")
+  createdBudgets          BudgetAllocation[]  @relation("BudgetCreator")
+  uploadedReceipts        Receipt[]           @relation("ReceiptUploader")
+  notifications           Notification[]
+  auditLogs               AuditLog[]          @relation("AuditActor")
+
+  @@index([email])
+  @@index([role])
+  @@index([clubId])
+  @@map("users")
+}
+
+model Club {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  code          String    @unique
+  description   String?
+  contactEmail  String?
+  isInternalAcm Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  members       User[]              @relation("UserClub")
+  events        Event[]
+  expenses      Expense[]
+  budgets       BudgetAllocation[]
+
+  @@index([code])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("clubs")
+}
+
+model Venue {
+  id                      String    @id @default(cuid())
+  name                    String    @unique
+  locationCode            String
+  capacity                Int
+  turnaroundMinutesBuffer Int       @default(30)
+  isActive                Boolean   @default(true)
+  description             String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  // Relations
+  events        Event[]
+
+  @@index([isActive])
+  @@map("venues")
+}
+
+model Semester {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  startDate     DateTime  // UTC date boundary
+  endDate       DateTime  // UTC date boundary
+  totalBudget   Decimal   @db.Decimal(12, 2)
+  isLocked      Boolean   @default(false)
+  lockedAt      DateTime?
+  lockedByUserId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  lockedBy      User?             @relation("SemesterLocker", fields: [lockedByUserId], references: [id], onDelete: SetNull)
+  events        Event[]
+  expenses      Expense[]
+  budgets       BudgetAllocation[]
+
+  @@index([startDate, endDate])
+  @@index([isLocked])
+  @@map("semesters")
+}
+
+// ============================================================
+// AUDIENCE MODEL
+//
+// targetYears: stores year numbers as Int[]. Empty array = ALL YEARS.
+// targetBranches: stores branch codes as String[]. Empty array = ALL BRANCHES.
+//
+// Convention:
+//   targetYears = []         means "All Years"
+//   targetYears = [1, 2]     means "1st and 2nd Year only"
+//   targetBranches = []      means "All Branches"
+//   targetBranches = ["CSE"] means "CSE only"
+//
+// The conflict engine will expand these into (year, branch) cell pairs.
+// Two events have audience overlap if their expanded cell sets intersect.
+// If either event has ALL years or ALL branches, the overlap is broader.
+// ============================================================
+
+model Event {
+  id               String       @id @default(cuid())
+  title            String
+  description      String?
+  eventType        EventType    @default(OTHER)
+  clubId           String
+  venueId          String
+  semesterId       String
+  submittedByUserId String
+
+  // UTC timestamps — NEVER store India local time as canonical time
+  startAt          DateTime
+  endAt            DateTime
+
+  // Structured audience
+  // Empty array means ALL (e.g. targetYears = [] means all years)
+  targetYears      Int[]
+  targetBranches   String[]
+
+  expectedAttendees Int          @default(0)
+
+  status           EventStatus  @default(DRAFT)
+  rejectionReason  String?
+
+  // For FullCalendar endpoint: additional metadata needed
+  bannerUrl        String?
+  tags             String[]
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+
+  // Relations
+  club             Club            @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  venue            Venue           @relation(fields: [venueId], references: [id], onDelete: Restrict)
+  semester         Semester        @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  submittedBy      User            @relation("EventSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  reviews          EventReview[]
+  conflictsAsA     ConflictRecord[] @relation("ConflictEventA")
+  conflictsAsB     ConflictRecord[] @relation("ConflictEventB")
+  expenses         Expense[]
+
+  // Indexes optimized for conflict detection range queries
+  @@index([startAt, endAt])
+  @@index([venueId, startAt, endAt])
+  @@index([clubId, startAt, endAt])
+  @@index([semesterId])
+  @@index([status])
+  @@index([deletedAt])
+  // Composite for filtering active events in a date range
+  @@index([deletedAt, status, startAt, endAt])
+  @@map("events")
+}
+
+model EventReview {
+  id             String         @id @default(cuid())
+  eventId        String
+  reviewerUserId String
+  decision       ReviewDecision
+  comment        String?
+  createdAt      DateTime       @default(now())
+
+  // Relations
+  event          Event  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  reviewer       User   @relation(fields: [reviewerUserId], references: [id], onDelete: Restrict)
+
+  @@index([eventId])
+  @@index([reviewerUserId])
+  @@map("event_reviews")
+}
+
+// ============================================================
+// CONFLICT RECORD
+//
+// UNIQUENESS STRATEGY:
+// - eventAId is ALWAYS the lexicographically smaller id of the pair.
+// - eventBId is ALWAYS the lexicographically larger id of the pair.
+// - This canonical ordering prevents (A,B) and (B,A) duplicate rows.
+// - The unique constraint is on (eventAId, eventBId, conflictType).
+// - This allows a pair to have BOTH VENUE + AUDIENCE conflicts simultaneously
+//   but prevents duplicate rows of the same conflict type for the same pair.
+// - The conflict service MUST enforce canonical ordering before insert.
+// ============================================================
+
+model ConflictRecord {
+  id                  String          @id @default(cuid())
+  // Canonical: eventAId < eventBId (lexicographic string comparison)
+  eventAId            String
+  eventBId            String
+  conflictType        ConflictType
+  severity            ConflictSeverity
+  // Optional enrichment fields
+  overlapMinutes      Int?            // For VENUE/ORGANIZER overlaps
+  conflictScore       Int?            // 0-100 composite score
+  description         String          // Human-readable explanation
+  status              ConflictStatus  @default(OPEN)
+  resolutionNote      String?
+  resolvedByUserId    String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  resolvedAt          DateTime?
+
+  // Relations
+  eventA              Event  @relation("ConflictEventA", fields: [eventAId], references: [id], onDelete: Restrict)
+  eventB              Event  @relation("ConflictEventB", fields: [eventBId], references: [id], onDelete: Restrict)
+  resolvedBy          User?  @relation("ConflictResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+
+  // Canonical pair + type uniqueness
+  @@unique([eventAId, eventBId, conflictType])
+  @@index([eventAId])
+  @@index([eventBId])
+  @@index([status])
+  @@index([severity])
+  @@index([conflictType])
+  @@map("conflict_records")
+}
+
+model ExpenseCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  expenses    Expense[]
+  budgets     BudgetAllocation[]
+
+  @@index([isActive])
+  @@map("expense_categories")
+}
+
+model BudgetAllocation {
+  id              String   @id @default(cuid())
+  semesterId      String
+  categoryId      String
+  // clubId null = institutional ACM shared budget line
+  clubId          String?
+  allocatedAmount Decimal  @db.Decimal(12, 2)
+  notes           String?
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  semester   Semester        @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  club       Club?           @relation(fields: [clubId], references: [id], onDelete: SetNull)
+  createdBy  User            @relation("BudgetCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  // Prevent duplicate allocation for same (semester, category, club) combination
+  @@unique([semesterId, categoryId, clubId])
+  @@index([semesterId])
+  @@index([categoryId])
+  @@index([clubId])
+  @@map("budget_allocations")
+}
+
+model Expense {
+  id              String        @id @default(cuid())
+  eventId         String?
+  semesterId      String
+  categoryId      String
+  clubId          String
+  createdByUserId String
+  title           String
+  description     String?
+  amount          Decimal       @db.Decimal(12, 2)
+  date            DateTime      // UTC date of expense
+  status          ExpenseStatus @default(PENDING)
+  reviewedByUserId String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  // Relations
+  event       Event?          @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  semester    Semester        @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  category    ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  club        Club            @relation(fields: [clubId], references: [id], onDelete: Restrict)
+  createdBy   User            @relation("ExpenseCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedBy  User?           @relation("ExpenseReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  receipts    Receipt[]
+
+  @@index([semesterId, date])
+  @@index([eventId])
+  @@index([categoryId])
+  @@index([clubId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("expenses")
+}
+
+model Receipt {
+  id               String   @id @default(cuid())
+  expenseId        String
+  fileUrl          String
+  storagePublicId  String   // Cloudinary public_id or S3 object key
+  fileName         String
+  mimeType         String
+  fileSizeBytes    Int
+  sha256           String   // Hex-encoded SHA-256 for duplicate detection
+  uploadedByUserId String
+  createdAt        DateTime @default(now())
+  deletedAt        DateTime?
+
+  // Relations
+  expense      Expense @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+  uploadedBy   User    @relation("ReceiptUploader", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([expenseId])
+  @@index([sha256])   // For duplicate receipt detection
+  @@index([deletedAt])
+  @@map("receipts")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  linkUrl   String?
+  payload   Json?            // Additional structured data
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  actorUserId  String?
+  action       AuditAction
+  targetType   String      // e.g. "Event", "Expense", "BudgetAllocation"
+  targetId     String      // cuid of the target record
+  beforeState  Json?       // Snapshot of relevant fields before mutation
+  afterState   Json?       // Snapshot of relevant fields after mutation
+  metadata     Json?       // IP, userAgent, request id, extra context
+  createdAt    DateTime    @default(now())
+
+  // Relations
+  actor        User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  // AuditLog is intentionally IMMUTABLE — no updatedAt, no cascade deletes
+  @@index([targetType, targetId])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
