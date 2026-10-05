@@ -349,3 +349,90 @@ For local development and testing, all seeded accounts are provisioned with:
 - **HTTP 401 (`UnauthorizedError`)**: Thrown when a request lacks an authenticated session or has an invalid/expired token (`requireUser()`).
 - **HTTP 403 (`ForbiddenError`)**: Thrown when an authenticated user lacks the required RBAC permission or attempts a cross-tenant ownership violation (`requirePermission()`, `requireClubAccess()`).
 
+---
+
+## Phase 3: Event Management & Calendar API
+
+Phase 3 introduces the complete event management domain service and Calendar API consumed by the Phase 4 Conflict Engine and Phase 9 FullCalendar UI.
+
+### 1. Event State Machine
+
+```text
+       ┌───────────┐
+       │   DRAFT   │
+       └─────┬─────┘
+             │ (SUBMIT_EVENT by Club Owner / ACM)
+             ▼
+       ┌───────────┐
+       │ SUBMITTED │
+       └─┬───────┬─┘
+         │       │
+(REJECT) │       │ (VERIFY_EVENT by ACM Core / Super Admin)
+         ▼       ▼
+   ┌──────────┐ ┌──────────┐
+   │ REJECTED │ │ VERIFIED │
+   └──────────┘ └─┬──────┬─┘
+                  │      │
+(CANCEL with note)│      │ (Auto-transition on completion)
+                  ▼      ▼
+            ┌───────────┐┌───────────┐
+            │ CANCELLED ││ COMPLETED │
+            └───────────┘└───────────┘
+```
+
+#### Lifecycle Rules & Invariants:
+- **`DRAFT`**: Initial state on creation. Can be updated or soft-deleted by the owning club rep or ACM Core.
+- **`SUBMITTED`**: Event submitted for institutional verification. Edits remain permitted.
+- **`VERIFIED`**: Approved by ACM Core or Super Admin. Records an `EventReview` decision row (`VERIFIED`) and transactional `AuditLog` entry. Direct updates are locked.
+- **`REJECTED`**: Rejected by ACM Core with mandatory `reason`. Records `EventReview` row (`REJECTED`) and `AuditLog`.
+- **`CANCELLED`**: Cancelled by owning club or ACM Core with mandatory `reason`.
+- **Soft Deletion**: `deletedAt` timestamp set. Never physically deleted from PostgreSQL. Automatically filtered out from calendar feeds and query listings.
+
+### 2. Endpoints Summary
+
+| Method | Endpoint | Description | Permissions |
+|---|---|---|---|
+| `POST` | `/api/events` | Create new event in `DRAFT` status | `CREATE_EVENT` + Club ownership |
+| `GET` | `/api/events` | List events with filters & pagination | `VIEW_CALENDAR` (Scoped by role) |
+| `GET` | `/api/events/[id]` | Get event detail with reviews & relations | `VIEW_EVENT` (Drafts scoped) |
+| `PATCH` | `/api/events/[id]` | Update draft/submitted event | `UPDATE_EVENT` + Club ownership |
+| `DELETE` | `/api/events/[id]` | Soft-delete draft event | `UPDATE_EVENT` + Club ownership |
+| `POST` | `/api/events/[id]/submit` | Transition `DRAFT` -> `SUBMITTED` | `SUBMIT_EVENT` + Club ownership |
+| `POST` | `/api/events/[id]/verify` | Transition `SUBMITTED` -> `VERIFIED` | `VERIFY_EVENT` (ACM Core/Admin) |
+| `POST` | `/api/events/[id]/reject` | Transition `SUBMITTED` -> `REJECTED` | `REJECT_EVENT` (ACM Core/Admin) |
+| `POST` | `/api/events/[id]/cancel` | Transition `VERIFIED/SUBMITTED` -> `CANCELLED` | `CANCEL_EVENT` or Club owner |
+| `GET` | `/api/calendar` | FullCalendar event feed (`from`, `to`) | `VIEW_CALENDAR` |
+
+### 3. Calendar Feed (`GET /api/calendar`)
+
+Queries events overlapping the specified `[from, to)` ISO-8601 UTC window (up to 366 days).
+
+**Response format (`FullCalendarEvent`):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "cm123456789...",
+      "title": "[DEMO] Technical Hackathon — Coding Club",
+      "start": "2026-09-20T10:30:00.000Z",
+      "end": "2026-09-20T14:30:00.000Z",
+      "extendedProps": {
+        "status": "VERIFIED",
+        "clubId": "cm123...",
+        "clubName": "Coding Club",
+        "clubCode": "CC",
+        "venueId": "cm456...",
+        "venueName": "Lecture Theatre 1 (LT-1)",
+        "eventType": "HACKATHON",
+        "expectedAttendees": 80,
+        "targetYears": [2],
+        "targetBranches": ["CSE", "IT"],
+        "organizer": "Coding Club"
+      }
+    }
+  ]
+}
+```
+
+
