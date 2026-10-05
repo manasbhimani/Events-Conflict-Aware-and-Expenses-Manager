@@ -247,11 +247,11 @@ describe('Events & Calendar API Route Handlers (Integration)', () => {
 
       // 5. CANCEL EVENT
       currentUserMock = {
-        id: codingRepUser.id,
-        email: codingRepUser.email,
-        name: codingRepUser.name,
-        role: codingRepUser.role,
-        clubId: codingRepUser.clubId,
+        id: acmCoreUser.id,
+        email: acmCoreUser.email,
+        name: acmCoreUser.name,
+        role: acmCoreUser.role,
+        clubId: acmCoreUser.clubId,
       }
       const cancelRes = await cancelEventHandler(
         new NextRequest(`http://localhost:3000/api/events/${createdEventId}/cancel`, {

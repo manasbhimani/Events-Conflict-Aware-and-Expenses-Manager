@@ -564,13 +564,7 @@ export class EventService {
       throw new NotFoundError('Event', eventId)
     }
 
-    // Either user has CANCEL_EVENT or owns the club event
-    const isOwner = user.clubId === event.clubId
-    const hasCancelPermission = can(user, 'CANCEL_EVENT')
-
-    if (!hasCancelPermission && !isOwner) {
-      throw new ForbiddenError(`Forbidden: Cannot cancel event for club '${event.clubId}'`)
-    }
+    assertCan(user, 'CANCEL_EVENT')
 
     if (event.status === EventStatus.CANCELLED || event.status === EventStatus.COMPLETED) {
       throw new BusinessRuleError(`Cannot cancel event: status is already '${event.status}'`)

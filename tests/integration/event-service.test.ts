@@ -286,8 +286,45 @@ describe('Phase 3 EventService Integration Tests', () => {
       ).rejects.toThrow(BusinessRuleError)
     })
 
-    it('allows cancelling a VERIFIED event with a reason', async () => {
-      const cancelled = await eventService.cancelEvent(codingClubRepUser, testEventId, 'Venue plumbing issue')
+    it('prevents CLUB_REP from cancelling a VERIFIED event', async () => {
+      await expect(
+        eventService.cancelEvent(codingClubRepUser, testEventId, 'Venue plumbing issue')
+      ).rejects.toThrow(ForbiddenError)
+    })
+
+    it('prevents ACM_EXEC from cancelling a VERIFIED event', async () => {
+      await expect(
+        eventService.cancelEvent(acmExecUser, testEventId, 'Venue plumbing issue')
+      ).rejects.toThrow(ForbiddenError)
+    })
+
+    it('prevents VIEWER from cancelling a VERIFIED event', async () => {
+      await expect(
+        eventService.cancelEvent(viewerUser, testEventId, 'Venue plumbing issue')
+      ).rejects.toThrow(ForbiddenError)
+    })
+
+    it('allows SUPER_ADMIN to cancel an event', async () => {
+      // Need a fresh event for SUPER_ADMIN to cancel
+      const saEvent = await eventService.createEvent(codingClubRepUser, {
+        title: 'SA Cancel Target',
+        eventType: EventType.WORKSHOP,
+        clubId: codingClubId,
+        venueId: lt1VenueId,
+        semesterId: currentSemesterId,
+        startAt: new Date('2026-11-20T10:00:00.000Z'),
+        endAt: new Date('2026-11-20T12:00:00.000Z'),
+        targetYears: [],
+        targetBranches: [],
+        expectedAttendees: 10,
+        tags: [],
+      })
+      const cancelled = await eventService.cancelEvent(superAdminUser, saEvent.id, 'SA Override Cancel')
+      expect(cancelled.status).toBe(EventStatus.CANCELLED)
+    })
+
+    it('allows ACM_CORE to cancel a VERIFIED event with a reason', async () => {
+      const cancelled = await eventService.cancelEvent(acmCoreUser, testEventId, 'Venue plumbing issue')
       expect(cancelled.status).toBe(EventStatus.CANCELLED)
       expect(cancelled.rejectionReason).toBe('Venue plumbing issue')
 
@@ -296,12 +333,12 @@ describe('Phase 3 EventService Integration Tests', () => {
         orderBy: { createdAt: 'desc' },
       })
       expect(audit).not.toBeNull()
-      expect(audit?.actorUserId).toBe(codingClubRepUser.id)
+      expect(audit?.actorUserId).toBe(acmCoreUser.id)
     })
 
     it('prevents cancelling an already CANCELLED event', async () => {
       await expect(
-        eventService.cancelEvent(codingClubRepUser, testEventId, 'Double cancel attempt')
+        eventService.cancelEvent(acmCoreUser, testEventId, 'Double cancel attempt')
       ).rejects.toThrow(BusinessRuleError)
     })
 
