@@ -272,3 +272,80 @@ Semester ←──── Event ────→ Venue
                               Expense ──────────→ AuditLog
                                          User ──→ Notification
 ```
+
+---
+
+## Phase 2: Authentication & Authorization Foundation
+
+### 1. Architecture
+
+Authentication is powered by **Auth.js / NextAuth v5** for Next.js 16 App Router using a JWT session strategy:
+
+- **Endpoint**: `/api/auth/[...nextauth]`
+- **Credentials Provider**: For local development and demonstration. Validates email against database, compares passwords using `bcryptjs`, and ensures `user.isActive === true`.
+- **Google OAuth Provider**: Environment-driven (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`).
+- **Domain Restriction**: Enforces `ALLOWED_EMAIL_DOMAIN` (e.g. `@college.edu`). Non-matching domains are rejected during OAuth callback.
+- **Safe Provisioning**: Newly created OAuth users are strictly assigned `role: VIEWER`. Elevated roles (`ACM_CORE`, `SUPER_ADMIN`, `ACM_EXEC`) cannot be self-assigned through OAuth.
+- **Client Identity Invariant**: Identity, role, and club ownership are derived exclusively from the authenticated session and database. Request body fields attempting to specify `userId`, `role`, or `clubId` are strictly ignored.
+
+### 2. Available Roles & RBAC Matrix
+
+| Role | Meaning & Primary Capabilities |
+|---|---|
+| `SUPER_ADMIN` | Full system governance, global access, budget allocation, audit visibility. |
+| `ACM_CORE` | Institutional authority: verify/reject events, resolve/override conflicts, approve/reject expenses, manage budgets, lock semesters, view audit. |
+| `ACM_EXEC` | ACM operational role: submit ACM events, create ACM expenses, view verified calendar and budget. Cannot verify events or approve expenses. |
+| `CLUB_REP` | External club representative: submit events and expenses for their assigned club ONLY. Acknowledge conflicts involving their events. |
+| `VIEWER` | Read-only access: view verified calendar and published events. No write or mutation permissions. |
+
+#### Permission Matrix
+
+| Action | SUPER_ADMIN | ACM_CORE | ACM_EXEC | CLUB_REP | VIEWER |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `VIEW_CALENDAR` / `VIEW_EVENT` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `CREATE_EVENT` / `UPDATE_EVENT` / `SUBMIT_EVENT` | ✅ | ✅ | ✅ (ACM) | ✅ (Own Club) | ❌ |
+| `VERIFY_EVENT` / `REJECT_EVENT` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `CANCEL_EVENT` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `ACKNOWLEDGE_CONFLICT` | ✅ | ✅ | ❌ | ✅ (Party) | ❌ |
+| `RESOLVE_CONFLICT` / `OVERRIDE_CONFLICT` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `CREATE_EXPENSE` / `UPDATE_EXPENSE` | ✅ | ✅ | ✅ (ACM) | ✅ (Own Club) | ❌ |
+| `APPROVE_EXPENSE` / `REJECT_EXPENSE` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `VIEW_BUDGET` | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `MANAGE_BUDGET` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `LOCK_SEMESTER` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `VIEW_ARCHIVE` / `VIEW_REPORTS` | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `VIEW_AUDIT` | ✅ | ✅ | ❌ | ❌ | ❌ |
+
+### 3. Resource Ownership & Multi-Tenancy Rules
+
+RBAC is paired with strict resource ownership:
+- `canAccessClub(user, clubId)`:
+  - `SUPER_ADMIN` & `ACM_CORE`: Multi-tenant institutional access across any club.
+  - `ACM_EXEC`: Access restricted to ACM club (`user.clubId`).
+  - `CLUB_REP`: Strictly isolated to `user.clubId`. Attempts to act on another club throw `ForbiddenError` (HTTP 403).
+  - `VIEWER`: Denied club administration access.
+- `canManageEvent(user, event)`: Requires `UPDATE_EVENT` permission AND `canAccessClub(user, event.clubId)`.
+- `canManageExpense(user, expense)`: Requires `UPDATE_EXPENSE` permission AND `canAccessClub(user, expense.clubId)`.
+
+### 4. Demo Login Credentials
+
+For local development and testing, all seeded accounts are provisioned with:
+
+- **Password**: `DemoPassword123!`
+
+| Role | Demo Email |
+|---|---|
+| `SUPER_ADMIN` | `superadmin@acm-demo.college.edu` |
+| `ACM_CORE` | `core@acm-demo.college.edu` |
+| `ACM_EXEC` | `exec@acm-demo.college.edu` |
+| `CLUB_REP` (Coding Club) | `rep.coding@acm-demo.college.edu` |
+| `CLUB_REP` (Robotics Club) | `rep.robotics@acm-demo.college.edu` |
+| `CLUB_REP` (GDSC) | `rep.gdsc@acm-demo.college.edu` |
+| `CLUB_REP` (E-Cell) | `rep.ecell@acm-demo.college.edu` |
+| `VIEWER` | `viewer@acm-demo.college.edu` |
+
+### 5. Error Handling: 401 vs 403
+
+- **HTTP 401 (`UnauthorizedError`)**: Thrown when a request lacks an authenticated session or has an invalid/expired token (`requireUser()`).
+- **HTTP 403 (`ForbiddenError`)**: Thrown when an authenticated user lacks the required RBAC permission or attempts a cross-tenant ownership violation (`requirePermission()`, `requireClubAccess()`).
+

@@ -1,6 +1,9 @@
 import { PrismaClient, UserRole, EventType, EventStatus } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
+const DEMO_PASSWORD = 'DemoPassword123!'
+const demoPasswordHash = bcrypt.hashSync(DEMO_PASSWORD, 10)
 
 // IST to UTC converter for seed data
 // IST = UTC + 5:30, so subtract 5h30m from IST to get UTC
@@ -114,10 +117,11 @@ async function main() {
 
   const superAdmin = await prisma.user.upsert({
     where: { email: 'superadmin@acm-demo.college.edu' },
-    update: {},
+    update: { passwordHash: demoPasswordHash },
     create: {
       email: 'superadmin@acm-demo.college.edu',
       name: 'Super Admin (Demo)',
+      passwordHash: demoPasswordHash,
       role: UserRole.SUPER_ADMIN,
       clubId: acmClub.id,
       isActive: true,
@@ -126,10 +130,11 @@ async function main() {
 
   const acmCore = await prisma.user.upsert({
     where: { email: 'core@acm-demo.college.edu' },
-    update: {},
+    update: { passwordHash: demoPasswordHash },
     create: {
       email: 'core@acm-demo.college.edu',
       name: 'ACM Core Member (Demo)',
+      passwordHash: demoPasswordHash,
       role: UserRole.ACM_CORE,
       clubId: acmClub.id,
       isActive: true,
@@ -138,10 +143,11 @@ async function main() {
 
   const acmExec = await prisma.user.upsert({
     where: { email: 'exec@acm-demo.college.edu' },
-    update: {},
+    update: { passwordHash: demoPasswordHash },
     create: {
       email: 'exec@acm-demo.college.edu',
       name: 'ACM Executive (Demo)',
+      passwordHash: demoPasswordHash,
       role: UserRole.ACM_EXEC,
       clubId: acmClub.id,
       isActive: true,
@@ -150,10 +156,11 @@ async function main() {
 
   const codingClubRep = await prisma.user.upsert({
     where: { email: 'rep.coding@acm-demo.college.edu' },
-    update: {},
+    update: { passwordHash: demoPasswordHash },
     create: {
       email: 'rep.coding@acm-demo.college.edu',
       name: 'Coding Club Rep (Demo)',
+      passwordHash: demoPasswordHash,
       role: UserRole.CLUB_REP,
       clubId: codingClub.id,
       isActive: true,
@@ -162,10 +169,11 @@ async function main() {
 
   const viewer = await prisma.user.upsert({
     where: { email: 'viewer@acm-demo.college.edu' },
-    update: {},
+    update: { passwordHash: demoPasswordHash },
     create: {
       email: 'viewer@acm-demo.college.edu',
       name: 'Read-Only Viewer (Demo)',
+      passwordHash: demoPasswordHash,
       role: UserRole.VIEWER,
       clubId: null,
       isActive: true,
@@ -174,10 +182,11 @@ async function main() {
 
   const roboticsRep = await prisma.user.upsert({
     where: { email: 'rep.robotics@acm-demo.college.edu' },
-    update: {},
+    update: { passwordHash: demoPasswordHash },
     create: {
       email: 'rep.robotics@acm-demo.college.edu',
       name: 'Robotics Club Rep (Demo)',
+      passwordHash: demoPasswordHash,
       role: UserRole.CLUB_REP,
       clubId: roboticsClub.id,
       isActive: true,
@@ -186,10 +195,11 @@ async function main() {
 
   const gdscRep = await prisma.user.upsert({
     where: { email: 'rep.gdsc@acm-demo.college.edu' },
-    update: {},
+    update: { passwordHash: demoPasswordHash },
     create: {
       email: 'rep.gdsc@acm-demo.college.edu',
       name: 'GDSC Rep (Demo)',
+      passwordHash: demoPasswordHash,
       role: UserRole.CLUB_REP,
       clubId: gdscClub.id,
       isActive: true,
@@ -198,10 +208,11 @@ async function main() {
 
   const ecellRep = await prisma.user.upsert({
     where: { email: 'rep.ecell@acm-demo.college.edu' },
-    update: {},
+    update: { passwordHash: demoPasswordHash },
     create: {
       email: 'rep.ecell@acm-demo.college.edu',
       name: 'E-Cell Rep (Demo)',
+      passwordHash: demoPasswordHash,
       role: UserRole.CLUB_REP,
       clubId: ecellClub.id,
       isActive: true,
@@ -1193,7 +1204,7 @@ async function main() {
         action: 'BUDGET_ALLOCATE',
         targetType: 'BudgetAllocation',
         targetId: currentSemester.id,
-        beforeState: null,
+        beforeState: undefined,
         afterState: { totalBudget: '50000.00', semester: 'Odd Semester 2026-27' },
         metadata: { note: 'Initial budget allocations set for Odd Semester 2026-27.' },
       },
