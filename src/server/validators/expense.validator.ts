@@ -19,7 +19,7 @@ export const ExpenseQuerySchema = z.object({
   eventId: z.string().optional(),
   clubId: z.string().optional(),
   categoryId: z.string().optional(),
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'REIMBURSED']).optional(),
+  status: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'REIMBURSED']).optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
   page: z.coerce.number().int().min(1).default(1),

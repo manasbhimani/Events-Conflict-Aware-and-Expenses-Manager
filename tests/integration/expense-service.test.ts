@@ -67,7 +67,7 @@ describe('Phase 5 ExpenseService Integration Tests', () => {
       })
       
       expect(expense).toBeDefined()
-      expect(expense.status).toBe(ExpenseStatus.PENDING)
+      expect(expense.status).toBe(ExpenseStatus.DRAFT)
       expect(expense.clubId).toBe(codingClubId)
       expect(expense.semesterId).toBe(activeSemesterId)
       
@@ -141,6 +141,7 @@ describe('Phase 5 ExpenseService Integration Tests', () => {
     })
 
     it('ACM_CORE CAN approve expense', async () => {
+      await expenseService.submitExpense(codingClubRepUser, testExpenseId)
       const approved = await expenseService.approveExpense(acmCoreUser, testExpenseId)
       expect(approved.status).toBe(ExpenseStatus.APPROVED)
     })
@@ -149,7 +150,7 @@ describe('Phase 5 ExpenseService Integration Tests', () => {
       await expect(expenseService.softDeleteExpense(acmCoreUser, testExpenseId)).rejects.toThrow(BusinessRuleError)
     })
 
-    it('ACM_CORE can reject PENDING expense', async () => {
+    it('ACM_CORE can reject SUBMITTED expense', async () => {
       const date = new Date('2026-10-01T10:00:00Z')
       const exp2 = await expenseService.createExpense(codingClubRepUser, {
         title: 'Lifecycle Test 2',
@@ -158,6 +159,7 @@ describe('Phase 5 ExpenseService Integration Tests', () => {
         date: date.toISOString(),
       })
 
+      await expenseService.submitExpense(codingClubRepUser, exp2.id)
       const rejected = await expenseService.rejectExpense(acmCoreUser, exp2.id, 'Too expensive')
       expect(rejected.status).toBe(ExpenseStatus.REJECTED)
       expect(rejected.rejectionReason).toBe('Too expensive')

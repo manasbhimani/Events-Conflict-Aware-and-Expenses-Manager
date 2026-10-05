@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { auth } from '@/server/lib/auth'
+import { requireUser } from '@/server/lib/auth'
 import { expenseService } from '@/server/services/expense.service'
 import { successResponse, unauthorizedResponse, validationErrorResponse, handleApiError } from '@/server/lib/api-response'
 import { CreateExpenseSchema, ExpenseQuerySchema } from '@/server/validators/expense.validator'
@@ -7,14 +7,14 @@ import { ExpenseStatus } from '@prisma/client'
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session?.user) return unauthorizedResponse()
+    const user = await requireUser()
+    
 
     const body = await req.json()
     const parsed = CreateExpenseSchema.safeParse(body)
     if (!parsed.success) return validationErrorResponse(parsed.error.format())
 
-    const expense = await expenseService.createExpense(session.user, parsed.data)
+    const expense = await expenseService.createExpense(user, parsed.data)
     return successResponse(expense, 201)
   } catch (error) {
     return handleApiError(error)
@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session?.user) return unauthorizedResponse()
+    const user = await requireUser()
+    
 
     const url = new URL(req.url)
     const rawQuery = {
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     const parsed = ExpenseQuerySchema.safeParse(rawQuery)
     if (!parsed.success) return validationErrorResponse(parsed.error.format())
 
-    const result = await expenseService.getExpenses(session.user, {
+    const result = await expenseService.getExpenses(user, {
       ...parsed.data,
       startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : undefined,
       endDate: parsed.data.endDate ? new Date(parsed.data.endDate) : undefined,

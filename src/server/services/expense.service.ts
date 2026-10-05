@@ -63,7 +63,7 @@ export class ExpenseService {
           eventId: eventId || null,
           semesterId: semester.id,
           createdByUserId: user.id,
-          status: ExpenseStatus.PENDING,
+          status: ExpenseStatus.DRAFT,
         },
         include: { club: true, category: true, semester: true },
       })
@@ -110,8 +110,8 @@ export class ExpenseService {
       throw new SemesterLockedError(expense.semester.name)
     }
 
-    if (expense.status !== ExpenseStatus.PENDING) {
-      throw new BusinessRuleError(`Cannot update expense in status '${expense.status}'. Only PENDING expenses can be edited.`)
+    if (expense.status !== ExpenseStatus.SUBMITTED) {
+      throw new BusinessRuleError(`Cannot update expense in status '${expense.status}'. Only DRAFT expenses can be edited.`)
     }
 
     let newClubId = expense.clubId
@@ -186,9 +186,6 @@ export class ExpenseService {
   // Let's look at `ExpenseStatus` again: PENDING, APPROVED, REJECTED, REIMBURSED.
   
   async submitExpense(user: SessionUser, expenseId: string) {
-    // There is no DRAFT status for Expenses, initial status is PENDING.
-    // To fulfill the requirement of "submit" while respecting the schema,
-    // we'll verify it's PENDING and log a submit action.
     const expense = await prisma.expense.findFirst({
       where: { id: expenseId, deletedAt: null },
       include: { semester: true },
@@ -201,18 +198,29 @@ export class ExpenseService {
 
     if (expense.semester.isLocked) throw new SemesterLockedError(expense.semester.name)
 
-    // Log the intent to submit
-    await prisma.auditLog.create({
-      data: {
-        actorUserId: user.id,
-        action: AuditAction.EXPENSE_UPDATE, // no EXPENSE_SUBMIT in AuditAction, wait, let me check AuditAction
-        targetType: 'Expense',
-        targetId: expenseId,
-        metadata: { note: 'Expense submitted/finalized' }
-      }
-    })
+    if (expense.status !== ExpenseStatus.DRAFT && expense.status !== ExpenseStatus.REJECTED) {
+      throw new BusinessRuleError(`Cannot submit expense in status '${expense.status}'.`)
+    }
 
-    return expense
+    return await prisma.$transaction(async (tx) => {
+      const updated = await tx.expense.update({
+        where: { id: expenseId },
+        data: { status: ExpenseStatus.SUBMITTED },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: user.id,
+          action: AuditAction.EXPENSE_SUBMIT,
+          targetType: 'Expense',
+          targetId: expenseId,
+          beforeState: { status: expense.status },
+          afterState: { status: ExpenseStatus.SUBMITTED },
+        }
+      })
+
+      return updated
+    })
   }
 
   async approveExpense(user: SessionUser, expenseId: string) {
@@ -231,7 +239,7 @@ export class ExpenseService {
       throw new SemesterLockedError(expense.semester.name)
     }
 
-    if (expense.status !== ExpenseStatus.PENDING) {
+    if (expense.status !== ExpenseStatus.SUBMITTED) {
       throw new BusinessRuleError(`Cannot approve expense in status '${expense.status}'`)
     }
 
@@ -251,7 +259,7 @@ export class ExpenseService {
           action: AuditAction.EXPENSE_APPROVE,
           targetType: 'Expense',
           targetId: expenseId,
-          beforeState: { status: ExpenseStatus.PENDING },
+          beforeState: { status: ExpenseStatus.SUBMITTED },
           afterState: { status: ExpenseStatus.APPROVED },
         },
       })
@@ -278,7 +286,7 @@ export class ExpenseService {
       throw new SemesterLockedError(expense.semester.name)
     }
 
-    if (expense.status !== ExpenseStatus.PENDING) {
+    if (expense.status !== ExpenseStatus.SUBMITTED) {
       throw new BusinessRuleError(`Cannot reject expense in status '${expense.status}'`)
     }
 
@@ -299,7 +307,7 @@ export class ExpenseService {
           action: AuditAction.EXPENSE_REJECT,
           targetType: 'Expense',
           targetId: expenseId,
-          beforeState: { status: ExpenseStatus.PENDING },
+          beforeState: { status: ExpenseStatus.SUBMITTED },
           afterState: { status: ExpenseStatus.REJECTED },
           metadata: { reason },
         },
@@ -322,7 +330,7 @@ export class ExpenseService {
 
     if (expense.semester.isLocked) throw new SemesterLockedError(expense.semester.name)
 
-    if (expense.status !== ExpenseStatus.PENDING && expense.status !== ExpenseStatus.REJECTED) {
+    if (expense.status !== ExpenseStatus.DRAFT && expense.status !== ExpenseStatus.REJECTED) {
       throw new BusinessRuleError(`Cannot delete expense in status '${expense.status}'`)
     }
 

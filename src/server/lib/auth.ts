@@ -121,12 +121,22 @@ export async function requireUser(): Promise<SessionUser> {
     throw new UnauthorizedError('Authentication required')
   }
 
+  // SECURITY FIX: Fetch fresh user from DB to prevent inactive-account bypass
+  // and ensure role/clubId are not stale from an old JWT session.
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id }
+  })
+
+  if (!dbUser || !dbUser.isActive) {
+    throw new UnauthorizedError('Account is inactive or does not exist')
+  }
+
   return {
-    id: session.user.id,
-    email: session.user.email ?? '',
-    name: session.user.name ?? '',
-    role: session.user.role,
-    clubId: session.user.clubId ?? null,
+    id: dbUser.id,
+    email: dbUser.email,
+    name: dbUser.name,
+    role: dbUser.role,
+    clubId: dbUser.clubId,
   }
 }
 

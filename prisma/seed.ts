@@ -1019,7 +1019,7 @@ async function main() {
       description: '1st: ₹5000, 2nd: ₹3000, 3rd: ₹2000 + spot prizes',
       amount: '11000.00',
       date: new Date('2026-09-20T00:00:00.000Z'),
-      status: 'PENDING' as const,
+      status: 'SUBMITTED' as const,
     },
     {
       eventId: hackathon?.id,
@@ -1031,7 +1031,7 @@ async function main() {
       description: 'Evening snacks + dinner for ~80 participants',
       amount: '3200.00',
       date: new Date('2026-09-20T00:00:00.000Z'),
-      status: 'PENDING' as const,
+      status: 'SUBMITTED' as const,
     },
     {
       eventId: hackathon?.id,

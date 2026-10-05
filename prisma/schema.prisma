@@ -68,7 +68,8 @@ enum ConflictStatus {
 }
 
 enum ExpenseStatus {
-  PENDING
+  DRAFT
+  SUBMITTED
   APPROVED
   REJECTED
   REIMBURSED
@@ -102,6 +103,7 @@ enum AuditAction {
   CONFLICT_OVERRIDE
   EXPENSE_CREATE
   EXPENSE_UPDATE
+  EXPENSE_SUBMIT
   EXPENSE_APPROVE
   EXPENSE_REJECT
   BUDGET_ALLOCATE
@@ -397,7 +399,7 @@ model Expense {
   description     String?
   amount          Decimal       @db.Decimal(12, 2)
   date            DateTime      // UTC date of expense
-  status          ExpenseStatus @default(PENDING)
+  status          ExpenseStatus @default(DRAFT)
   reviewedByUserId String?
   reviewedAt      DateTime?
   rejectionReason String?

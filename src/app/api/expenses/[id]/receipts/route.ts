@@ -1,13 +1,13 @@
 import { NextRequest } from 'next/server'
-import { auth } from '@/server/lib/auth'
+import { requireUser } from '@/server/lib/auth'
 import { receiptService } from '@/server/services/receipt.service'
 import { successResponse, unauthorizedResponse, validationErrorResponse, handleApiError } from '@/server/lib/api-response'
 import { UploadReceiptMetadataSchema } from '@/server/validators/receipt.validator'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await auth()
-    if (!session?.user) return unauthorizedResponse()
+    const user = await requireUser()
+    
 
     const { id } = await params
     const body = await req.json()
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       storagePublicId: body.storagePublicId || 'mock_public_id',
     }
 
-    const receipt = await receiptService.addReceipt(session.user, id, data)
+    const receipt = await receiptService.addReceipt(user, id, data)
     return successResponse(receipt, 201)
   } catch (error) {
     return handleApiError(error)
@@ -30,11 +30,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await auth()
-    if (!session?.user) return unauthorizedResponse()
+    const user = await requireUser()
+    
 
     const { id } = await params
-    const receipts = await receiptService.getReceipts(session.user, id)
+    const receipts = await receiptService.getReceipts(user, id)
     return successResponse(receipts)
   } catch (error) {
     return handleApiError(error)

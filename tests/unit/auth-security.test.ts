@@ -4,8 +4,17 @@ import { UnauthorizedError, ForbiddenError } from '@/server/lib/errors'
 import type { SessionUser } from '@/server/types'
 
 // Hoisted mock function so vi.mock can access it
-const { mockAuthFn } = vi.hoisted(() => ({
+const { mockPrismaFindUnique, mockAuthFn } = vi.hoisted(() => ({
+  mockPrismaFindUnique: vi.fn(),
   mockAuthFn: vi.fn(),
+}))
+
+vi.mock('@/server/lib/prisma', () => ({
+  default: {
+    user: {
+      findUnique: mockPrismaFindUnique,
+    },
+  },
 }))
 
 vi.mock('next-auth', () => ({
@@ -36,6 +45,10 @@ import {
 describe('Authentication & Security Invariants Unit Tests', () => {
   beforeEach(() => {
     mockAuthFn.mockReset()
+    mockPrismaFindUnique.mockReset()
+    mockPrismaFindUnique.mockImplementation(async ({ where }) => {
+      let r='VIEWER'; let c=null; if(where.id==='usr-rep-real'){r='CLUB_REP'; c='club-own-id'} return { id: where.id, isActive: true, role: r, clubId: c, email: 'mock@mock', name: 'Mock' }
+    })
   })
 
   describe('Unauthenticated access (HTTP 401)', () => {

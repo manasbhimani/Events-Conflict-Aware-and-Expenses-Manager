@@ -27,6 +27,17 @@ export class ReceiptService {
     }
 
     // Check duplicate
+    // SECURITY LIMITATION (Phase 5 Audit):
+    // The `sha256` hash is currently provided by the client because files are 
+    // uploaded directly to Cloudinary. A malicious client could provide a fake 
+    // hash to bypass duplicate detection, allowing them to upload identical receipts.
+    // 
+    // Fix options for future phases:
+    // 1. Fetch file bytes from `data.fileUrl` server-side to recompute SHA-256 before saving.
+    // 2. Use Cloudinary Webhooks to confirm the upload and hash out-of-band.
+    // 3. Request Cloudinary Admin API to fetch the asset's etag/signature securely.
+    //
+    // For now, this is a known architectural limitation of the direct-upload pattern.
     const existing = await prisma.receipt.findFirst({
       where: { sha256: data.sha256, deletedAt: null }
     })
