@@ -497,3 +497,51 @@ When events are updated and no longer conflict, stale records are gracefully mar
 | POST | /api/conflicts/[id]/resolve | ACM Core resolves the conflict with notes |
 | POST | /api/conflicts/[id]/override | Super Admin forcibly overrides the conflict |
 
+
+---
+
+## Phase 5: Expense + Receipt Management
+
+### Expense Architecture & Lifecycle
+Expenses are mapped directly to ExpenseStatus. The lifecycle follows:
+- **PENDING**: Initial state upon creation.
+- **APPROVED**: Explicit approval step (restricted to ACM_CORE and SUPER_ADMIN).
+- **REJECTED**: Explicit rejection (must include a rejection reason).
+
+### APIs
+- POST /api/expenses
+- GET /api/expenses (Supports pagination and filtering)
+- GET /api/expenses/:id
+- PATCH /api/expenses/:id
+- DELETE /api/expenses/:id (Soft delete only)
+- POST /api/expenses/:id/submit (Logs submission intent)
+- POST /api/expenses/:id/approve
+- POST /api/expenses/:id/reject
+- POST /api/expenses/:id/receipts
+- GET /api/expenses/:id/receipts
+- GET /api/expenses/:id/receipts/signature (Generates server-side Cloudinary signature)
+
+### RBAC Rules
+Strict boundaries enforce multi-tenant isolation based on the exact Phase 2 matrix:
+- **CLUB_REP**: Can only create, update, or submit expenses for their explicitly associated club. Cannot view or mutate other clubs' financial records.
+- **ACM_EXEC**: Restricted to the ACM club explicitly.
+- **ACM_CORE / SUPER_ADMIN**: Can create, update, approve, and reject expenses across any club.
+- **VIEWER**: Denied from all mutation endpoints.
+
+### Decimal Money Convention
+The amount field must always be stored precisely in Prisma.Decimal to map directly to PostgreSQL DECIMAL(12,2).
+No floating-point operations (Number, parseFloat) are permitted in final computations. 0, negative amounts, excess decimals, NaN, Infinity, and malformed strings are strictly rejected.
+
+### Semester Locking
+Financial integrity is guarded by the active/locked Semester model. If an expense falls within a locked semester:
+- New expense creations are rejected.
+- Updates to existing expenses are rejected.
+- Soft-deletions are rejected.
+- Receipt uploads are rejected.
+
+### Receipt Security
+Receipt metadata is tracked in PostgreSQL while binary assets are isolated and securely uploaded to Cloudinary.
+- **Allowed Formats:** PDF (application/pdf), JPG (image/jpeg), PNG (image/png).
+- **File Limit:** Exactly 5 MB maximum limit enforced strictly via Zod.
+- **Duplicate SHA-256 Detection:** A 64-character SHA-256 hash must be provided per receipt to reject identical content duplication globally across the system.
+- **Cloudinary:** CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET must be set in the .env file. Signed access ensures that client-side credentials are never leaked.
