@@ -1,4 +1,5 @@
 import prisma from '@/server/lib/prisma'
+import { conflictService } from './conflict.service'
 import {
   EventStatus,
   ReviewDecision,
@@ -448,6 +449,9 @@ export class EventService {
    */
   async verifyEvent(user: SessionUser, eventId: string, comment?: string) {
     assertCan(user, 'VERIFY_EVENT')
+
+    // Run conflict detection before verifying
+    await conflictService.detectConflicts(user, eventId)
 
     const event = await prisma.event.findFirst({
       where: { id: eventId, deletedAt: null },

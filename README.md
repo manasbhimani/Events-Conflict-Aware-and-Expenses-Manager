@@ -436,3 +436,64 @@ Queries events overlapping the specified `[from, to)` ISO-8601 UTC window (up to
 ```
 
 
+---
+
+## Phase 4: Conflict Detection Engine
+
+Phase 4 introduces the core scheduling conflict engine, designed to detect, score, and flag overlapping events without automatically altering them (Human Decision Principle).
+
+### 1. Conflict Types
+
+The engine identifies four primary conflict conditions between overlapping events:
+
+1. **VENUE**: Two events claim the same physical venue simultaneously.
+2. **ORGANIZER**: The same club (clubId) attempts to organize overlapping events.
+3. **AUDIENCE**: Two events simultaneously target overlapping demographics (Years & Branches).
+4. **TIGHT_TURNAROUND**: Sequential events have a gap of less than 30 minutes, risking setup/teardown overlap.
+
+### 2. Time Overlap Semantics
+
+- **End-Exclusive Interval**: Two events A and B overlap temporally if and only if A.startAt < B.endAt AND B.startAt < A.endAt.
+- Boundary-touching events (e.g. 10:00-11:00 and 11:00-12:00) do **NOT** overlap in time.
+
+### 3. Jaccard Audience Similarity
+
+Audience targets are expanded into logical cells: (year, branch). 
+Similarity is calculated using the Jaccard index:
+Jaccard = |A n B| / |A ? B|
+
+Wildcards ([] representing ALL years or ALL branches) automatically expand to match any opposing targets proportionally.
+
+### 4. Weighted Scoring Formula
+
+A normalized   to 1 score determines conflict severity:
+
+`	ext
+Score = 0.4 * (Jaccard Audience Similarity) 
+      + 0.3 * (Temporal Overlap Ratio) 
+      + 0.2 * (Same Event Type Match) 
+      + 0.1 * (Normalized Expected Audience Size)
+`
+
+- **Severity Thresholds**:
+  - HIGH: Score >= 0.70
+  - MEDIUM: Score >= 0.40 and < 0.70
+  - LOW: Score < 0.40 (Filtered if strictly audience-based, retained if Venue/Organizer/Turnaround).
+
+### 5. Idempotent Data Model
+
+Conflicts are stored transactionally with a canonical unique constraint:
+[eventAId, eventBId, conflictType] where eventAId is always the lexicographically smaller ID. This guarantees no duplicate pairs. 
+
+When events are updated and no longer conflict, stale records are gracefully marked RESOLVED.
+
+### 6. Conflict APIs
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | /api/events/[id]/conflicts/detect | Triggers detection for an event, upserts records |
+| GET | /api/events/[id]/conflicts | Retrieves all detected conflicts involving the event |
+| POST | /api/conflicts/[id]/acknowledge | Club Rep acknowledges the conflict |
+| POST | /api/conflicts/[id]/resolve | ACM Core resolves the conflict with notes |
+| POST | /api/conflicts/[id]/override | Super Admin forcibly overrides the conflict |
+
