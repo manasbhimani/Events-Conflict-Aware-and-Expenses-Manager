@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { signIn, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { KeyRound, Mail, AlertCircle, Shield, ArrowRight } from 'lucide-react'
+import { KeyRound, Mail, AlertCircle, Shield } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
