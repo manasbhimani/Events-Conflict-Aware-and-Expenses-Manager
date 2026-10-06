@@ -545,3 +545,81 @@ Receipt metadata is tracked in PostgreSQL while binary assets are isolated and s
 - **File Limit:** Exactly 5 MB maximum limit enforced strictly via Zod.
 - **Duplicate SHA-256 Detection:** A 64-character SHA-256 hash must be provided per receipt to reject identical content duplication globally across the system.
 - **Cloudinary:** CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET must be set in the .env file. Signed access ensures that client-side credentials are never leaked.
+
+---
+
+## Phase 5.5 — Basic Functional Testing Frontend
+
+A minimal, functional internal control panel designed to allow developers and judges to manually test the full backend capabilities directly through a web browser.
+
+### How to Run
+
+1. Ensure the PostgreSQL database is running and seeded:
+   ```bash
+   npm run db:seed
+   ```
+2. Start the development server:
+   ```bash
+   npm run dev
+   ```
+3. Open `http://localhost:3000` in your browser. Unauthenticated visits automatically redirect to `/login`.
+
+### Demo Login Credentials
+
+Universal password for all demo accounts: `DemoPassword123!`
+
+| Role | Email | Scope / Capability |
+|---|---|---|
+| **SUPER_ADMIN** | `superadmin@acm-demo.college.edu` | Full institutional override, verify/cancel events, approve expenses |
+| **ACM_CORE** | `core@acm-demo.college.edu` | Verify/reject events, cancel events, resolve conflicts, approve expenses |
+| **ACM_EXEC** | `exec@acm-demo.college.edu` | Create/submit events & expenses for internal ACM club |
+| **CLUB_REP** | `rep.coding@acm-demo.college.edu` | Create/submit events & expenses for Coding Club; ack conflicts |
+| **CLUB_REP** | `rep.robotics@acm-demo.college.edu`| Create/submit events & expenses for Robotics Club; ack conflicts |
+| **VIEWER** | `viewer@acm-demo.college.edu` | Read-only verified events and calendar; no expenses or conflicts |
+
+*Note: The login page includes quick-click buttons to automatically fill credentials for any of the roles above.*
+
+### Available Pages
+
+- `/login` — Clean credentials login with error feedback and quick demo autofill.
+- `/dashboard` — Active session identity, role badges, stats, and role capability matrix.
+- `/events` — Filterable directory of campus events with lifecycle actions.
+- `/events/new` — Proposal submission form supporting structured audience wildcards (`[]` = ALL).
+- `/events/[id]` — Detailed event inspection with reviews, submit, verify, reject, cancel, and conflict detection.
+- `/conflicts` — Centralized ACM Core conflict adjudicator table with Acknowledge, Resolve, and Override controls.
+- `/calendar` — Interactive FullCalendar view rendering verified and pending events across months/weeks.
+- `/expenses` — Audit-logged financial ledger with status filtering (`DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`).
+- `/expenses/new` — Safe Decimal(12,2) expense recording bound to semester dates.
+- `/expenses/[id]` — Financial entry detail with approval workflows, locked semester protection, and receipt upload.
+
+### How to Test Features
+
+1. **Events Lifecycle:**
+   - Log in as `rep.coding@acm-demo.college.edu`.
+   - Go to `/events/new` and submit a new event (starts in `DRAFT`).
+   - On the event detail page, click **Submit for Review** (transitions to `SUBMITTED`).
+   - Log out, log in as `core@acm-demo.college.edu`.
+   - On the event detail page, click **Verify Event** or **Reject Event** (with reason).
+
+2. **Conflict Detection Engine:**
+   - On any event detail page, click **Detect Conflicts**.
+   - The engine evaluates overlapping candidates within &plusmn;30 minutes, computes Jaccard audience similarity, overlap ratios, and composite scores (`0-100`).
+   - Review the detected conflicts table. As `ACM_CORE` or `SUPER_ADMIN`, test **Resolve** (with note) or **Override**.
+   - Verify that the engine **never** cancels or alters event state automatically (Human Decision Principle).
+   - Navigate to `/conflicts` to inspect all detected conflicts across the university.
+
+3. **Calendar:**
+   - Visit `/calendar`.
+   - Browse months/weeks. Notice color coding by status.
+   - Click an event to open its detail view directly.
+
+4. **Expenses & Receipts:**
+   - As a `CLUB_REP`, navigate to `/expenses/new` and record an expense (initializes as `DRAFT`).
+   - On `/expenses/[id]`, click **Submit for Approval** (`SUBMITTED`).
+   - Test receipt upload: Select a JPEG/PNG/PDF (< 5MB). The browser calculates the SHA-256 hash client-side and registers the receipt metadata.
+   - Log in as `core@acm-demo.college.edu` and click **Approve Expense** (`APPROVED`).
+   - Note that if an expense falls into a locked semester, mutations are blocked with an explicit warning banner.
+
+### Cloudinary Architecture Note
+
+Direct client-to-Cloudinary upload ensures that backend servers do not handle heavy binary payloads. In local testing mode without production Cloudinary API credentials, the receipt upload flow generates mock storage URLs while preserving cryptographic SHA-256 client hashing and strict metadata validation in the PostgreSQL database.
