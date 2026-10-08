@@ -18,41 +18,49 @@ export function Sidebar() {
   const { data: session } = useSession()
   const role = session?.user?.role
 
-  const isViewer = role === 'VIEWER'
+    const isViewer = role === 'VIEWER'
+    const canViewBudgets = role === 'SUPER_ADMIN' || role === 'ACM_CORE' || role === 'ACM_EXEC'
 
-  const navItems = [
-    {
-      name: 'Dashboard',
-      href: '/dashboard',
-      icon: LayoutDashboard,
-      show: true,
-    },
-    {
-      name: 'Events',
-      href: '/events',
-      icon: CalendarDays,
-      show: true,
-    },
-    {
-      name: 'Calendar',
-      href: '/calendar',
-      icon: Calendar,
-      show: true,
-    },
-    {
-      name: 'Conflicts',
-      href: '/conflicts',
-      icon: AlertTriangle,
-      show: !isViewer,
-      badge: 'Core/Rep',
-    },
-    {
-      name: 'Expenses',
-      href: '/expenses',
-      icon: Receipt,
-      show: !isViewer,
-    },
-  ]
+    const navItems = [
+      {
+        name: 'Dashboard',
+        href: '/dashboard',
+        icon: LayoutDashboard,
+        show: true,
+      },
+      {
+        name: 'Events',
+        href: '/events',
+        icon: CalendarDays,
+        show: true,
+      },
+      {
+        name: 'Calendar',
+        href: '/calendar',
+        icon: Calendar,
+        show: true,
+      },
+      {
+        name: 'Conflicts',
+        href: '/conflicts',
+        icon: AlertTriangle,
+        show: !isViewer,
+        badge: 'Core/Rep',
+      },
+      {
+        name: 'Expenses',
+        href: '/expenses',
+        icon: Receipt,
+        show: !isViewer,
+      },
+      {
+        name: 'Budgets',
+        href: '/budgets',
+        icon: Receipt, // Reusing Receipt icon, could also be PieChart
+        show: canViewBudgets,
+        badge: 'Core/Exec',
+      },
+    ]
 
   return (
     <aside className="w-64 bg-zinc-900 text-zinc-300 flex flex-col flex-shrink-0 min-h-screen">

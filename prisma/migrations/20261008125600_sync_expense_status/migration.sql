@@ -1,0 +1,1 @@
+ALTER TYPE "ExpenseStatus" ADD VALUE 'DRAFT'; ALTER TYPE "ExpenseStatus" ADD VALUE 'SUBMITTED';
