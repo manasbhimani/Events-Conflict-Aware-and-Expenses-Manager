@@ -9,7 +9,7 @@ import {
   Calendar,
   CalendarDays,
   AlertTriangle,
-  Receipt,
+  Receipt, Bell,
   PlusCircle,
 } from 'lucide-react'
 
@@ -18,8 +18,19 @@ export function Sidebar() {
   const { data: session } = useSession()
   const role = session?.user?.role
 
-    const isViewer = role === 'VIEWER'
-    const canViewBudgets = role === 'SUPER_ADMIN' || role === 'ACM_CORE' || role === 'ACM_EXEC'
+  const [unreadCount, setUnreadCount] = React.useState(0)
+  
+  React.useEffect(() => {
+    if (session?.user) {
+      fetch('/api/notifications/unread-count')
+        .then(res => res.json())
+        .then(data => setUnreadCount(data.count || 0))
+        .catch(console.error)
+    }
+  }, [session?.user])
+
+  const isViewer = role === 'VIEWER'
+  const canViewBudgets = role === 'SUPER_ADMIN' || role === 'ACM_CORE' || role === 'ACM_EXEC'
 
     const navItems = [
       {
@@ -52,6 +63,13 @@ export function Sidebar() {
         href: '/expenses',
         icon: Receipt,
         show: !isViewer,
+      },
+      {
+        name: 'Notifications',
+        href: '/notifications',
+        icon: Bell,
+        show: !!session?.user,
+        badge: unreadCount > 0 ? unreadCount : undefined,
       },
       {
         name: 'Budgets',

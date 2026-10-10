@@ -626,5 +626,6 @@ Direct client-to-Cloudinary upload ensures that backend servers do not handle he
 
  # # #   T r o u b l e s h o o t i n g 
  
- -   * * L o g i n   P a g e   R u n t i m e   E r r o r   /   H y d r a t i o n   M i s m a t c h * * :   I f   y o u   e n c o u n t e r   a   N e x t . j s   h y d r a t i o n   m i s m a t c h   p o i n t i n g   t o   < S h i e l d   / >   o r   d a t a - d a r k r e a d e r - m o d e ,   t h i s   i s   c a u s e d   b y   t h e   D a r k   R e a d e r   b r o w s e r   e x t e n s i o n   m o d i f y i n g   t h e   D O M .   D i s a b l e   D a r k   R e a d e r   o n   l o c a l h o s t   t o   r e s o l v e   i t .  
+ -   * * L o g i n   P a g e   R u n t i m e   E r r o r   /   H y d r a t i o n   M i s m a t c h * * :   I f   y o u   e n c o u n t e r   a   N e x t . j s   h y d r a t i o n   m i s m a t c h   p o i n t i n g   t o   < S h i e l d   / >   o r   d a t a - d a r k r e a d e r - m o d e ,   t h i s   i s   c a u s e d   b y   t h e   D a r k   R e a d e r   b r o w s e r   e x t e n s i o n   m o d i f y i n g   t h e   D O M .   D i s a b l e   D a r k   R e a d e r   o n   l o c a l h o s t   t o   r e s o l v e   i t . 
+ 
  

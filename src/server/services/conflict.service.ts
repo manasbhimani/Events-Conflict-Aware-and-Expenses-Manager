@@ -1,5 +1,6 @@
 import { Event, EventStatus, ConflictType, ConflictStatus, ConflictRecord, Prisma } from '@prisma/client'
 import { prisma } from '@/server/lib/prisma'
+import { notificationService } from './notification.service'
 import { SessionUser } from '@/server/types'
 import { assertCan, can } from '@/server/policies/rbac.policy'
 import { ForbiddenError, NotFoundError, BusinessRuleError } from '@/server/lib/errors'
@@ -193,6 +194,56 @@ export class ConflictService {
           }
         })
         results.push(record)
+
+          // Notification Logic
+          const existing = existingConflicts.find(ex => 
+            ex.eventAId === record.eventAId && 
+            ex.eventBId === record.eventBId && 
+            ex.conflictType === record.conflictType
+          )
+          
+          if (!existing) {
+             const otherEventId = record.eventAId === event.id ? record.eventBId : record.eventAId
+             const otherEvent = await tx.event.findUnique({ where: { id: otherEventId }, select: { clubId: true, title: true } })
+             
+             await notificationService.notifyCoreReviewers({
+               type: 'CONFLICT_FLAGGED',
+               title: 'New Conflict Detected',
+               message: `Conflict of type '${record.conflictType}' detected between '${event.title}' and '${otherEvent?.title}'.`,
+               linkUrl: `/conflicts/`,
+               idempotencyKey: `conflict_new_${record.id}`,
+             }, user.id, tx)
+             
+             await notificationService.notifyClubRepresentatives(event.clubId, {
+               type: 'CONFLICT_FLAGGED',
+               title: 'New Conflict Detected',
+               message: `Conflict of type '${record.conflictType}' detected for your event '${event.title}'.`,
+               linkUrl: `/conflicts/`,
+               idempotencyKey: `conflict_new_${record.id}_A`,
+             }, user.id, tx)
+
+             if (otherEvent) {
+               await notificationService.notifyClubRepresentatives(otherEvent.clubId, {
+                 type: 'CONFLICT_FLAGGED',
+                 title: 'New Conflict Detected',
+                 message: `Conflict of type '${record.conflictType}' detected for your event '${otherEvent.title}'.`,
+                 linkUrl: `/conflicts/`,
+                 idempotencyKey: `conflict_new_${record.id}_B`,
+               }, user.id, tx)
+             }
+          } else if (existing.severity !== record.severity) {
+             // Severity changed
+             const otherEventId = record.eventAId === event.id ? record.eventBId : record.eventAId
+             const otherEvent = await tx.event.findUnique({ where: { id: otherEventId }, select: { clubId: true, title: true } })
+             
+             await notificationService.notifyCoreReviewers({
+               type: 'CONFLICT_FLAGGED',
+               title: 'Conflict Severity Changed',
+               message: `Severity changed to '${record.severity}' for conflict between '${event.title}' and '${otherEvent?.title}'.`,
+               linkUrl: `/conflicts/`,
+               idempotencyKey: `conflict_sev_${record.id}_${record.severity}`,
+             }, user.id, tx)
+          }
       }
 
       // Update stale conflicts. The schema has RESOLVED, OVERRIDDEN, OPEN, ACKNOWLEDGED.

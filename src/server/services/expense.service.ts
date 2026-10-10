@@ -1,5 +1,6 @@
 import { ExpenseStatus, AuditAction, Prisma } from '@prisma/client'
 import prisma from '@/server/lib/prisma'
+import { notificationService } from './notification.service'
 import { SessionUser } from '@/server/types'
 import { assertCan, can, assertCanAccessClub, canAccessClub, canManageExpense } from '@/server/policies/rbac.policy'
 import { ForbiddenError, NotFoundError, BusinessRuleError, SemesterLockedError } from '@/server/lib/errors'
@@ -219,6 +220,14 @@ export class ExpenseService {
         }
       })
 
+      await notificationService.notifyCoreReviewers({
+        type: 'EXPENSE_SUBMITTED',
+        title: 'Expense Submitted',
+        message: `Expense '${updated.description}' for $${updated.amount} has been submitted and is awaiting approval.`,
+        linkUrl: `/expenses/${expenseId}`,
+        idempotencyKey: `exp_sub_${expenseId}_${updated.updatedAt.getTime()}`,
+      }, user.id, tx)
+
       return updated
     })
   }
@@ -263,6 +272,14 @@ export class ExpenseService {
           afterState: { status: ExpenseStatus.APPROVED },
         },
       })
+
+      await notificationService.notifyUser(updated.createdByUserId, {
+        type: 'EXPENSE_APPROVED',
+        title: 'Expense Approved',
+        message: `Your expense '${updated.description}' for $${updated.amount} has been approved.`,
+        linkUrl: `/expenses/${expenseId}`,
+        idempotencyKey: `exp_app_${expenseId}_${updated.updatedAt.getTime()}`,
+      }, user.id, tx)
 
       return updated
     })
@@ -312,6 +329,14 @@ export class ExpenseService {
           metadata: { reason },
         },
       })
+
+      await notificationService.notifyUser(updated.createdByUserId, {
+        type: 'EXPENSE_REJECTED',
+        title: 'Expense Rejected',
+        message: `Your expense '${updated.description}' for $${updated.amount} was rejected.\nReason: ${reason}`,
+        linkUrl: `/expenses/${expenseId}`,
+        idempotencyKey: `exp_rej_${expenseId}_${updated.updatedAt.getTime()}`,
+      }, user.id, tx)
 
       return updated
     })

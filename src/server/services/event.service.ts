@@ -1,5 +1,6 @@
 import prisma from '@/server/lib/prisma'
 import { conflictService } from './conflict.service'
+import { notificationService } from './notification.service'
 import {
   EventStatus,
   ReviewDecision,
@@ -438,6 +439,18 @@ export class EventService {
         },
       })
 
+      await notificationService.notifyCoreReviewers(
+        {
+          type: 'EVENT_SUBMITTED',
+          title: 'Event Submitted',
+          message: `Event '${updated.title}' has been submitted and is awaiting verification.`,
+          linkUrl: `/events/${eventId}`,
+          idempotencyKey: `evt_sub_${eventId}_${updated.updatedAt.getTime()}`,
+        },
+        user.id,
+        tx
+      )
+
       return updated
     })
   }
@@ -496,6 +509,32 @@ export class EventService {
         },
       })
 
+      await notificationService.notifyUser(
+        updated.submittedByUserId,
+        {
+          type: 'EVENT_VERIFIED',
+          title: 'Event Verified',
+          message: `Your event '${updated.title}' has been verified by ACM Core.`,
+          linkUrl: `/events/${eventId}`,
+          idempotencyKey: `evt_ver_${eventId}_${updated.updatedAt.getTime()}`,
+        },
+        user.id,
+        tx
+      )
+
+      await notificationService.notifyClubRepresentatives(
+        updated.clubId,
+        {
+          type: 'EVENT_VERIFIED',
+          title: 'Event Verified',
+          message: `Event '${updated.title}' has been verified by ACM Core.`,
+          linkUrl: `/events/${eventId}`,
+          idempotencyKey: `evt_ver_club_${eventId}_${updated.updatedAt.getTime()}`,
+        },
+        user.id,
+        tx
+      )
+
       return updated
     })
   }
@@ -551,6 +590,32 @@ export class EventService {
         },
       })
 
+      await notificationService.notifyUser(
+        updated.submittedByUserId,
+        {
+          type: 'EVENT_REJECTED',
+          title: 'Event Rejected',
+          message: `Your event '${updated.title}' was rejected.`,
+          linkUrl: `/events/${eventId}`,
+          idempotencyKey: `evt_rej_${eventId}_${updated.updatedAt.getTime()}`,
+        },
+        user.id,
+        tx
+      )
+
+      await notificationService.notifyClubRepresentatives(
+        updated.clubId,
+        {
+          type: 'EVENT_REJECTED',
+          title: 'Event Rejected',
+          message: `Event '${updated.title}' was rejected.`,
+          linkUrl: `/events/${eventId}`,
+          idempotencyKey: `evt_rej_club_${eventId}_${updated.updatedAt.getTime()}`,
+        },
+        user.id,
+        tx
+      )
+
       return updated
     })
   }
@@ -595,6 +660,32 @@ export class EventService {
           metadata: { reason },
         },
       })
+
+      await notificationService.notifyUser(
+        updated.submittedByUserId,
+        {
+          type: 'EVENT_CANCELLED',
+          title: 'Event Cancelled',
+          message: `Event '${updated.title}' has been cancelled.`,
+          linkUrl: `/events/${eventId}`,
+          idempotencyKey: `evt_can_${eventId}_${updated.updatedAt.getTime()}`,
+        },
+        user.id,
+        tx
+      )
+
+      await notificationService.notifyClubRepresentatives(
+        updated.clubId,
+        {
+          type: 'EVENT_CANCELLED',
+          title: 'Event Cancelled',
+          message: `Event '${updated.title}' has been cancelled.`,
+          linkUrl: `/events/${eventId}`,
+          idempotencyKey: `evt_can_club_${eventId}_${updated.updatedAt.getTime()}`,
+        },
+        user.id,
+        tx
+      )
 
       return updated
     })
