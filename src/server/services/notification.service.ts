@@ -26,26 +26,22 @@ export class NotificationService {
   ) {
     const db = tx || prisma
 
-    try {
-      return await db.notification.create({
-        data: {
-          userId: input.userId,
-          type: input.type,
-          title: input.title,
-          message: input.message,
-          linkUrl: input.linkUrl,
-          payload: input.payload || Prisma.JsonNull,
-          idempotencyKey: input.idempotencyKey,
-        },
-      })
-    } catch (error: any) {
-      if (error.code === 'P2002' && input.idempotencyKey) {
-        // Unique constraint failed on idempotencyKey. 
-        // This means the notification was already created.
-        return null
-      }
-      throw error
-    }
+    // Use createMany with skipDuplicates to safely ignore duplicates
+    // without aborting PostgreSQL transactions on P2002.
+    await db.notification.createMany({
+      data: [{
+        userId: input.userId,
+        type: input.type,
+        title: input.title,
+        message: input.message,
+        linkUrl: input.linkUrl,
+        payload: input.payload || Prisma.JsonNull,
+        idempotencyKey: input.idempotencyKey,
+      }],
+      skipDuplicates: true,
+    })
+
+    return null
   }
 
   async getUserNotifications(user: SessionUser, page = 1, limit = 20, unreadOnly = false) {

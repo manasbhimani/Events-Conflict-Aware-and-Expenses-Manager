@@ -10,6 +10,8 @@ describe('Phase 6 Budget Service Integration Tests', () => {
   let logisticsCat: any, marketingCat: any, otherCat: any
   let club: any
 
+  
+
   beforeAll(async () => {
     // Users
     superAdmin = await prisma.user.findFirst({ where: { role: UserRole.SUPER_ADMIN } })
